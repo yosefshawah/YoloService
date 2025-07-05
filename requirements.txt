@@ -1,0 +1,10 @@
+# FastAPI and Uvicorn (for web API)
+fastapi>=0.95.0
+uvicorn>=0.21.1
+
+# Pillow for image handling
+pillow>=9.5.0
+
+# Ultralytics YOLOv8 (includes minimal dependencies)
+ultralytics>=8.0.0
+python-multipart>=0.0.6
