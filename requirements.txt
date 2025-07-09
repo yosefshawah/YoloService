@@ -1,7 +1,7 @@
 # FastAPI and Uvicorn (for web API)
 fastapi>=0.95.0
 uvicorn>=0.21.1
-
+httpx
 # Pillow for image handling
 pillow>=9.5.0
 
