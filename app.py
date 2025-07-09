@@ -249,6 +249,51 @@ def get_unique_labels_last_week():
 
 
 
+from collections import Counter
+from fastapi import APIRouter
+import sqlite3
+
+@app.get("/stats")
+def get_prediction_statistics_last_week():
+    """
+    Get stats about predictions in the last 7 days:
+    - Total predictions
+    - Average confidence score
+    - Most common labels
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+
+        # Get total predictions in last 7 days
+        total = conn.execute("""
+            SELECT COUNT(*) as count
+            FROM prediction_sessions
+            WHERE timestamp >= datetime('now', '-7 days')
+        """).fetchone()["count"]
+
+        # Get all scores and labels in last 7 days
+        rows = conn.execute("""
+            SELECT do.label, do.score
+            FROM detection_objects do
+            JOIN prediction_sessions ps ON do.prediction_uid = ps.uid
+            WHERE ps.timestamp >= datetime('now', '-7 days')
+        """).fetchall()
+
+        scores = [row["score"] for row in rows]
+        labels = [row["label"] for row in rows]
+
+        avg_score = round(sum(scores) / len(scores), 4) if scores else 0.0
+        label_counts = dict(Counter(labels))
+
+    return {
+        "total_predictions": total,
+        "average_confidence_score": avg_score,
+        "most_common_labels": label_counts
+    }
+
+
+
+
 @app.get("/health")
 def health():
     """
