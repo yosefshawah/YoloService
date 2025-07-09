@@ -106,7 +106,8 @@ def predict(file: UploadFile = File(...)):
         bbox = box.xyxy[0].tolist()
         save_detection_object(uid, label, score, bbox)
         detected_labels.append(label)
-        processing_time = round(time.time() - start_time, 2)
+    
+    processing_time = round(time.time() - start_time, 2)
 
     return {
         "prediction_uid": uid, 
