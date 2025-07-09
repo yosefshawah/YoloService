@@ -246,6 +246,46 @@ def get_unique_labels_last_week():
         labels = [row["label"] for row in cursor.fetchall()]
     return {"labels": labels}
 
+import os
+from fastapi import HTTPException
+
+@app.delete("/prediction/{uid}")
+def delete_prediction(uid: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        #test
+        # Get image file paths from DB
+        row = conn.execute(
+            "SELECT original_image, predicted_image FROM prediction_sessions WHERE uid = ?", (uid,)
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Prediction not found")
+
+        original_path, predicted_path = row
+
+        # Delete DB records first
+        conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (uid,))
+        conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (uid,))
+        conn.commit()
+
+    # Delete files if they exist
+    for path in [original_path, predicted_path]:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                # Log error or handle it, but don't block response
+                print(f"Failed to delete file {path}: {e}")
+
+    return {"detail": f"Prediction {uid} and associated files deleted"}
+
+@app.get("/predictions/uuids")
+def get_all_prediction_uuids():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT uid FROM prediction_sessions").fetchall()
+        return [row["uid"] for row in rows]
+
 
 
 
