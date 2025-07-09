@@ -9,5 +9,5 @@
 
 *.db
 *.pt
-
+__pycache__/
 uploads/

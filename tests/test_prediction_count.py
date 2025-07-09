@@ -1,13 +1,15 @@
+import unittest
 from fastapi.testclient import TestClient
 from app import app
 
-client = TestClient(app)
+class TestPredictionCount(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
 
-def test_prediction_count_format():
-    response = client.get("/prediction/count")
-    assert response.status_code == 200
-    data = response.json()
-    assert "count" in data
-    assert isinstance(data["count"], int)
-    assert data["count"] >= 0
-
+    def test_prediction_count_format(self):
+        response = self.client.get("/prediction/count")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("count", data)
+        self.assertIsInstance(data["count"], int)
+        self.assertGreaterEqual(data["count"], 0)
