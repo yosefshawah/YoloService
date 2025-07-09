@@ -216,6 +216,21 @@ def get_prediction_image(uid: str, request: Request):
         # If the client doesn't accept image, respond with 406 Not Acceptable
         raise HTTPException(status_code=406, detail="Client does not accept an image format")
 
+@app.get("/prediction/count")
+def get_prediction_count_last_week():
+    """
+    Get the number of predictions made in the last 7 days
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute("""
+            SELECT COUNT(*) FROM prediction_sessions
+            WHERE timestamp >= datetime('now', '-7 days')
+        """)
+        count = cursor.fetchone()[0]
+    return {"count": count}
+
+
+
 @app.get("/health")
 def health():
     """
