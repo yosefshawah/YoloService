@@ -266,6 +266,7 @@ def delete_prediction(uid: str):
         # Delete DB records first
         conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (uid,))
         conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (uid,))
+        #Delete from labels table aswell
         conn.commit()
 
     # Delete files if they exist
