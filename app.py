@@ -297,7 +297,7 @@ import sqlite3
 @app.get("/stats")
 def get_prediction_statistics_last_week():
     """
-    Get stats about predictions in the last 7 days:
+    Get stats about predictions in the last 8 days:
     - Total predictions
     - Average confidence score
     - Most common labels
@@ -309,7 +309,7 @@ def get_prediction_statistics_last_week():
         total = conn.execute("""
             SELECT COUNT(*) as count
             FROM prediction_sessions
-            WHERE timestamp >= datetime('now', '-7 days')
+            WHERE timestamp >= datetime('now', '-8 days')
         """).fetchone()["count"]
 
         # Get all scores and labels in last 7 days
@@ -317,7 +317,7 @@ def get_prediction_statistics_last_week():
             SELECT do.label, do.score
             FROM detection_objects do
             JOIN prediction_sessions ps ON do.prediction_uid = ps.uid
-            WHERE ps.timestamp >= datetime('now', '-7 days')
+            WHERE ps.timestamp >= datetime('now', '-8 days')
         """).fetchall()
 
         scores = [row["score"] for row in rows]
