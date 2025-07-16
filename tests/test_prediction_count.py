@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 DB_PATH = "predictions.db"
 
+
 class TestPredictionCount(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -15,26 +16,32 @@ class TestPredictionCount(unittest.TestCase):
             conn.execute("DELETE FROM prediction_sessions")
 
             # Insert a recent prediction (within 7 days)
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO prediction_sessions (uid, timestamp, original_image, predicted_image)
                 VALUES (?, ?, ?, ?)
-            """, (
-                "recent-id", 
-                datetime.utcnow().isoformat(), 
-                "recent_original.jpg", 
-                "recent_predicted.jpg"
-            ))
+            """,
+                (
+                    "recent-id",
+                    datetime.utcnow().isoformat(),
+                    "recent_original.jpg",
+                    "recent_predicted.jpg",
+                ),
+            )
 
             # Insert an old prediction (more than 7 days ago)
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO prediction_sessions (uid, timestamp, original_image, predicted_image)
                 VALUES (?, ?, ?, ?)
-            """, (
-                "old-id", 
-                (datetime.utcnow() - timedelta(days=10)).isoformat(), 
-                "old_original.jpg", 
-                "old_predicted.jpg"
-            ))
+            """,
+                (
+                    "old-id",
+                    (datetime.utcnow() - timedelta(days=10)).isoformat(),
+                    "old_original.jpg",
+                    "old_predicted.jpg",
+                ),
+            )
 
     def test_prediction_count_format(self):
         """Check response format and status"""

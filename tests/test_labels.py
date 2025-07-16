@@ -5,23 +5,24 @@ from PIL import Image
 import io
 import time
 
+
 class TestLabelsEndpoint(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
         # Upload a sample image to ensure there is at least one prediction with labels
-        test_image = Image.new('RGB', (100, 100), color='blue')
+        test_image = Image.new("RGB", (100, 100), color="blue")
         image_bytes = io.BytesIO()
-        test_image.save(image_bytes, format='JPEG')
+        test_image.save(image_bytes, format="JPEG")
         image_bytes.seek(0)
 
         response = self.client.post(
-            "/predict",
-            files={"file": ("test.jpg", image_bytes, "image/jpeg")}
+            "/predict", files={"file": ("test.jpg", image_bytes, "image/jpeg")}
         )
         self.assertEqual(response.status_code, 200)
         self.prediction_data = response.json()
         time.sleep(1)  # Ensure timestamp is properly recorded
+
 
 def test_labels_endpoint(self):
     """Test that /labels returns correct label list structure and values"""
@@ -29,7 +30,7 @@ def test_labels_endpoint(self):
     self.assertEqual(response.status_code, 200)
 
     data = response.json()
-    
+
     # Expect a dict with 'labels' key containing list of labels
     self.assertIsInstance(data, dict)
     self.assertIn("labels", data)
