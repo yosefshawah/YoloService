@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import Depends, FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from ultralytics import YOLO
 from PIL import Image
@@ -7,16 +7,14 @@ import os
 import uuid
 import shutil
 import time
-from middleware.auth import AuthMiddleware
 from fastapi import Request
-
+from dependencies.auth import get_current_user_id
 # Disable GPU usage
 import torch
 
 torch.cuda.is_available = lambda: False
 
 app = FastAPI()
-app.add_middleware(AuthMiddleware)
 
 @app.get("/")
 def home():
@@ -116,12 +114,12 @@ def save_detection_object(prediction_uid, label, score, box):
 
 
 @app.post("/predict")
-def predict(request:Request ,file: UploadFile = File(...)):
+def predict(user_id = Depends(get_current_user_id) ,file: UploadFile = File(...)):
     """
     Predict objects in an image
     """
     
-    user_id = request.state.user_id  # Get authenticated user's ID
+    
     start_time = time.time()
     ext = os.path.splitext(file.filename)[1]
     uid = str(uuid.uuid4())
@@ -160,8 +158,8 @@ def predict(request:Request ,file: UploadFile = File(...)):
 
 
 @app.get("/prediction/{uid}")
-def get_prediction_by_uid(uid: str, request: Request):
-    user_id = request.state.user_id
+def get_prediction_by_uid(  uid: str, user_id = Depends(get_current_user_id)):
+ 
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
