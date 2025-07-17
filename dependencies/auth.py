@@ -4,9 +4,12 @@ import sqlite3
 import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from typing import Optional
+from fastapi import Request
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "predictions.db")
-security = HTTPBasic()
+
+security = HTTPBasic(auto_error=False)
 
 def ensure_users_table():
     with sqlite3.connect(DB_PATH) as conn:
@@ -37,15 +40,21 @@ def get_anonymous_user_id() -> int:
         cursor.execute("SELECT id FROM users WHERE username = '__anonymous__'")
         return cursor.fetchone()[0]
 
-def get_current_user_id(credentials: HTTPBasicCredentials = Depends(security)) -> int:
-    """
-    Auth logic equivalent to your middleware, triggered per request via Depends
-    """
+def get_current_user_id(
+    request: Request,
+    credentials: Optional[HTTPBasicCredentials] = Depends(security),
+    ):
+    
     ensure_users_table()
+
+    if credentials is None or (not credentials.username and not credentials.password):
+        return get_anonymous_user_id()
+ 
     username = credentials.username
     password = credentials.password
 
-    if not username and not password:
+    #this if the user is anonymous meaning null
+    if not username and not password: 
         return get_anonymous_user_id()
 
     if username and not password:
