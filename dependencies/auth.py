@@ -68,7 +68,7 @@ def get_current_user_id(
             stored_password = user[1]
             if stored_password == password:
                 return user[0]
-            raise HTTPException(status_code=403, detail="Incorrect password.")
+            raise HTTPException(status_code=401, detail="Incorrect password.")
         else:
             # Auto-create user
             try:
