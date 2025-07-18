@@ -3,6 +3,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 from app import app, DB_PATH  # Adjust if app is named differently
 
+
 class TestStatsEndpoint(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -10,23 +11,34 @@ class TestStatsEndpoint(unittest.TestCase):
 
         # Insert dummy prediction and detections
         with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO prediction_sessions (uid, original_image, predicted_image, timestamp)
                 VALUES (?, 'uploads/original/dummy.jpg', 'uploads/predicted/dummy.jpg', datetime('now'))
-            """, (self.test_uid,))
-            conn.execute("""
+            """,
+                (self.test_uid,),
+            )
+            conn.execute(
+                """
                 INSERT INTO detection_objects (prediction_uid, label, score, box)
                 VALUES (?, 'dog', 0.90, '[0,0,10,10]'),
                        (?, 'dog', 0.80, '[0,0,10,10]'),
                        (?, 'cat', 0.85, '[0,0,10,10]')
-            """, (self.test_uid, self.test_uid, self.test_uid))
+            """,
+                (self.test_uid, self.test_uid, self.test_uid),
+            )
             conn.commit()
 
     def tearDown(self):
         # Clean up test data
         with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (self.test_uid,))
-            conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (self.test_uid,))
+            conn.execute(
+                "DELETE FROM detection_objects WHERE prediction_uid = ?",
+                (self.test_uid,),
+            )
+            conn.execute(
+                "DELETE FROM prediction_sessions WHERE uid = ?", (self.test_uid,)
+            )
             conn.commit()
 
     def test_stats_endpoint_structure_and_values(self):
@@ -47,6 +59,7 @@ class TestStatsEndpoint(unittest.TestCase):
         # Check label counts
         self.assertGreaterEqual(data["most_common_labels"].get("dog", 0), 2)
         self.assertGreaterEqual(data["most_common_labels"].get("cat", 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,7 @@ from app import app, init_db, DB_PATH
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
 
+
 class TestDeletePredictionEndpoint(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -27,12 +28,18 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
             img.save(path, format="JPEG")
 
         with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO prediction_sessions (uid, original_image, predicted_image)
-                VALUES (?, ?, ?)""", (self.uid, self.original_filename, self.predicted_filename))
-            conn.execute("""
+                VALUES (?, ?, ?)""",
+                (self.uid, self.original_filename, self.predicted_filename),
+            )
+            conn.execute(
+                """
                 INSERT INTO detection_objects (prediction_uid, label, score, box)
-                VALUES (?, ?, ?, ?)""", (self.uid, "test-label", 0.99, "[0,0,10,10]"))
+                VALUES (?, ?, ?, ?)""",
+                (self.uid, "test-label", 0.99, "[0,0,10,10]"),
+            )
 
     def tearDown(self):
         # ❌ Don't remove the whole DB
@@ -40,7 +47,9 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
 
         # Clean test DB entries
         with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (self.uid,))
+            conn.execute(
+                "DELETE FROM detection_objects WHERE prediction_uid = ?", (self.uid,)
+            )
             conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (self.uid,))
             conn.commit()
 
@@ -55,7 +64,9 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
         self.assertTrue(os.path.exists(self.original_filename))
         self.assertTrue(os.path.exists(self.predicted_filename))
 
-        print("\n🕒 Waiting 3 seconds to inspect files in 'uploads/original' and 'uploads/predicted'...")
+        print(
+            "\n🕒 Waiting 3 seconds to inspect files in 'uploads/original' and 'uploads/predicted'..."
+        )
         time.sleep(3)
 
         response = self.client.delete(f"/prediction/{self.uid}")
@@ -70,8 +81,11 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
             cur.execute("SELECT * FROM prediction_sessions WHERE uid = ?", (self.uid,))
             self.assertIsNone(cur.fetchone())
 
-            cur.execute("SELECT * FROM detection_objects WHERE prediction_uid = ?", (self.uid,))
+            cur.execute(
+                "SELECT * FROM detection_objects WHERE prediction_uid = ?", (self.uid,)
+            )
             self.assertIsNone(cur.fetchone())
+
 
 if __name__ == "__main__":
     unittest.main()
