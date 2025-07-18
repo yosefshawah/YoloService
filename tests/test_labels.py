@@ -24,28 +24,28 @@ class TestLabelsEndpoint(unittest.TestCase):
         time.sleep(1)  # Ensure timestamp is properly recorded
 
 
-def test_labels_endpoint(self):
-    """Test that /labels returns correct label list structure and values"""
-    response = self.client.get("/labels")
-    self.assertEqual(response.status_code, 200)
+    def test_labels_endpoint(self):
+        """Test that /labels returns correct label list structure and values"""
+        response = self.client.get("/labels")
+        self.assertEqual(response.status_code, 200)
 
-    data = response.json()
+        data = response.json()
 
-    # Expect a dict with 'labels' key containing list of labels
-    self.assertIsInstance(data, dict)
-    self.assertIn("labels", data)
-    labels_list = data["labels"]
-    self.assertIsInstance(labels_list, list)
+        # Expect a dict with 'labels' key containing list of labels
+        self.assertIsInstance(data, dict)
+        self.assertIn("labels", data)
+        labels_list = data["labels"]
+        self.assertIsInstance(labels_list, list)
 
-    # Check all labels are strings and non-empty
-    for label in labels_list:
-        self.assertIsInstance(label, str)
-        self.assertTrue(label.strip(), "Label should not be empty")
+        # Check all labels are strings and non-empty
+        for label in labels_list:
+            self.assertIsInstance(label, str)
+            self.assertTrue(label.strip(), "Label should not be empty")
 
-    # Check there are no duplicates
-    self.assertEqual(len(labels_list), len(set(labels_list)), "Duplicate labels found")
+        # Check there are no duplicates
+        self.assertEqual(len(labels_list), len(set(labels_list)), "Duplicate labels found")
 
-    # (Optional) Check known label exists if predict succeeded
-    if "labels" in self.prediction_data:
-        for expected_label in self.prediction_data["labels"]:
-            self.assertIn(expected_label, labels_list)
+        # (Optional) Check known label exists if predict succeeded
+        if "labels" in self.prediction_data:
+            for expected_label in self.prediction_data["labels"]:
+                self.assertIn(expected_label, labels_list)
