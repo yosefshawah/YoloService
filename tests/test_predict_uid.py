@@ -1,3 +1,4 @@
+import os
 import unittest
 import sqlite3
 import uuid
@@ -7,44 +8,36 @@ from dependencies.auth import get_current_user_id
 
 TEST_USER = "testuser_fullcode"
 TEST_PASS = "testpass"
-TEST_USER_ID = 1001  
+TEST_USER_ID = 1001
 
 SECOND_USER = "seconduser_fullcode"
 SECOND_PASS = "secondpass"
 SECOND_USER_ID = 1002
 
+
 class TestGetPredictionByUID(unittest.TestCase):
     def setUp(self):
-        # Create client first
-        self.client = TestClient(app)
+        # Remove DB file if exists to start fresh
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
 
-        # Override dependency for current user ID (simulate authentication)
-        app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
-
-        # Initialize DB and clear tables before each test
+        # Initialize DB tables
         init_db()
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("DELETE FROM detection_objects")
-            conn.execute("DELETE FROM prediction_sessions")
-            conn.execute("DELETE FROM users")
-            conn.commit()
 
-            # Insert test users
+        # Insert test users and initial prediction data
+        with sqlite3.connect(DB_PATH) as conn:
+            # Insert users
             conn.execute(
-                "INSERT OR IGNORE INTO users (id, username, password) VALUES (?, ?, ?)",
+                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
                 (TEST_USER_ID, TEST_USER, TEST_PASS),
             )
             conn.execute(
-                "INSERT OR IGNORE INTO users (id, username, password) VALUES (?, ?, ?)",
+                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
                 (SECOND_USER_ID, SECOND_USER, SECOND_PASS),
             )
-            conn.commit()
 
-        # Create a unique prediction UID for tests
-        self.uid = str(uuid.uuid4())
-
-        # Insert prediction session for TEST_USER
-        with sqlite3.connect(DB_PATH) as conn:
+            # Insert prediction session for TEST_USER
+            self.uid = str(uuid.uuid4())
             conn.execute(
                 "INSERT INTO prediction_sessions (uid, user_id, timestamp, original_image, predicted_image) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)",
                 (self.uid, TEST_USER_ID, "original.jpg", "predicted.jpg"),
@@ -55,14 +48,19 @@ class TestGetPredictionByUID(unittest.TestCase):
             )
             conn.commit()
 
+        # Create TestClient and override auth dependency to simulate TEST_USER_ID
+        self.client = TestClient(app)
+        app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+
     def tearDown(self):
-        # Remove dependency override after test
+        # Clear dependency overrides to avoid leakage between tests
         app.dependency_overrides = {}
 
     def test_get_prediction_success(self):
-        headers = {"Authorization": f"Basic dummy"}  # Auth is overridden anyway
+        headers = {"Authorization": "Basic dummy"}  # Auth overridden anyway
         response = self.client.get(f"/prediction/{self.uid}", headers=headers)
         self.assertEqual(response.status_code, 200)
+
         data = response.json()
         self.assertEqual(data["uid"], self.uid)
         self.assertEqual(data["original_image"], "original.jpg")
@@ -72,16 +70,16 @@ class TestGetPredictionByUID(unittest.TestCase):
         self.assertEqual(data["detection_objects"][0]["label"], "cat")
 
     def test_get_prediction_unauthorized(self):
-        # Change override to simulate second user trying to access first user's data
+        # Override auth dependency to simulate second user
         app.dependency_overrides[get_current_user_id] = lambda: SECOND_USER_ID
 
-        headers = {"Authorization": f"Basic dummy"}
+        headers = {"Authorization": "Basic dummy"}
         response = self.client.get(f"/prediction/{self.uid}", headers=headers)
         self.assertEqual(response.status_code, 401)
         self.assertIn("Unauthorized", response.json().get("detail", ""))
 
     def test_get_prediction_not_found(self):
-        headers = {"Authorization": f"Basic dummy"}
+        headers = {"Authorization": "Basic dummy"}
         response = self.client.get("/prediction/non-existent-uid", headers=headers)
         self.assertEqual(response.status_code, 401)
         self.assertIn("Unauthorized", response.json().get("detail", ""))
