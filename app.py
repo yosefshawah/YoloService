@@ -16,9 +16,6 @@ torch.cuda.is_available = lambda: False
 
 app = FastAPI()
 
-@app.get("/")
-def home():
-    return {"message": "Authenticated successfully!"}
 
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
@@ -196,9 +193,10 @@ def get_prediction_by_uid(  uid: str, user_id = Depends(get_current_user_id)):
 
 
 @app.get("/predictions/label/{label}")
-def get_predictions_by_label(label: str):
+def get_predictions_by_label(label: str, user_id: int = Depends(get_current_user_id)):
     """
-    Get prediction sessions containing objects with specified label
+    Get prediction sessions belonging to the current user
+    that contain objects with the specified label.
     """
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -207,9 +205,9 @@ def get_predictions_by_label(label: str):
             SELECT DISTINCT ps.uid, ps.timestamp
             FROM prediction_sessions ps
             JOIN detection_objects do ON ps.uid = do.prediction_uid
-            WHERE do.label = ?
-        """,
-            (label,),
+            WHERE do.label = ? AND ps.user_id = ?
+            """,
+            (label, user_id),
         ).fetchall()
 
         return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
