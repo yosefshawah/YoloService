@@ -315,37 +315,37 @@ from fastapi import HTTPException
 
 
 @app.delete("/prediction/{uid}")
-def delete_prediction(uid: str):
+def delete_prediction(uid: str, user_id: int = Depends(get_current_user_id)):
     with sqlite3.connect(DB_PATH) as conn:
-        # test
-        # Get image file paths from DB
+        # Check that the prediction exists and belongs to the current user
         row = conn.execute(
-            "SELECT original_image, predicted_image FROM prediction_sessions WHERE uid = ?",
-            (uid,),
+            """
+            SELECT original_image, predicted_image 
+            FROM prediction_sessions 
+            WHERE uid = ? AND user_id = ?
+            """,
+            (uid, user_id),
         ).fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail="Prediction not found")
+            raise HTTPException(status_code=404, detail="Prediction not found or access denied")
 
         original_path, predicted_path = row
 
-        # Delete DB records first
+        # Delete records from related tables
         conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (uid,))
         conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (uid,))
-        # Delete from labels table aswell
         conn.commit()
 
-    # Delete files if they exist
+    # Delete image files from disk
     for path in [original_path, predicted_path]:
         if path and os.path.exists(path):
             try:
                 os.remove(path)
             except Exception as e:
-                # Log error or handle it, but don't block response
                 print(f"Failed to delete file {path}: {e}")
 
     return {"detail": f"Prediction {uid} and associated files deleted"}
-
 
 
 
@@ -355,9 +355,9 @@ import sqlite3
 
 
 @app.get("/stats")
-def get_prediction_statistics_last_week():
+def get_prediction_statistics_last_week(user_id: int = Depends(get_current_user_id)):
     """
-    Get stats about predictions in the last 8 days:
+    Get stats about predictions in the last 8 days for the authenticated user:
     - Total predictions
     - Average confidence score
     - Most common labels
@@ -365,23 +365,25 @@ def get_prediction_statistics_last_week():
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
 
-        # Get total predictions in last 7 days
+        # Get total predictions in last 8 days for this user
         total = conn.execute(
             """
             SELECT COUNT(*) as count
             FROM prediction_sessions
-            WHERE timestamp >= datetime('now', '-8 days')
-        """
+            WHERE user_id = ? AND timestamp >= datetime('now', '-8 days')
+            """,
+            (user_id,),
         ).fetchone()["count"]
 
-        # Get all scores and labels in last 7 days
+        # Get all scores and labels in last 8 days for this user
         rows = conn.execute(
             """
             SELECT do.label, do.score
             FROM detection_objects do
             JOIN prediction_sessions ps ON do.prediction_uid = ps.uid
-            WHERE ps.timestamp >= datetime('now', '-8 days')
-        """
+            WHERE ps.user_id = ? AND ps.timestamp >= datetime('now', '-8 days')
+            """,
+            (user_id,),
         ).fetchall()
 
         scores = [row["score"] for row in rows]
