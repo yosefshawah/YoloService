@@ -214,9 +214,10 @@ def get_predictions_by_label(label: str, user_id: int = Depends(get_current_user
 
 
 @app.get("/predictions/score/{min_score}")
-def get_predictions_by_score(min_score: float):
+def get_predictions_by_score(min_score: float, user_id: int = Depends(get_current_user_id)):
     """
-    Get prediction sessions containing objects with score >= min_score
+    Get prediction sessions belonging to the current user
+    that contain objects with score >= min_score.
     """
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -225,9 +226,9 @@ def get_predictions_by_score(min_score: float):
             SELECT DISTINCT ps.uid, ps.timestamp
             FROM prediction_sessions ps
             JOIN detection_objects do ON ps.uid = do.prediction_uid
-            WHERE do.score >= ?
-        """,
-            (min_score,),
+            WHERE do.score >= ? AND ps.user_id = ?
+            """,
+            (min_score, user_id),
         ).fetchall()
 
         return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
