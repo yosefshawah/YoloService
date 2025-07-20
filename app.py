@@ -346,12 +346,6 @@ def delete_prediction(uid: str):
     return {"detail": f"Prediction {uid} and associated files deleted"}
 
 
-@app.get("/predictions/uuids")
-def get_all_prediction_uuids():
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT uid FROM prediction_sessions").fetchall()
-        return [row["uid"] for row in rows]
 
 
 from collections import Counter
