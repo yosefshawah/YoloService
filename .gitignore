@@ -11,7 +11,8 @@ TODO.md
 *.pt
 __pycache__/
 uploads/
-
+uploads/original
+uploads/predicted
 # Pytest cache
 .pytest_cache/
 
