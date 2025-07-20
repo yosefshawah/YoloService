@@ -68,6 +68,7 @@ class TestGetPredictionsByScore(unittest.TestCase):
             conn.commit()
 
         self.client = TestClient(app)
+        #simulates logging in as the second user.
         app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
 
     def test_get_predictions_above_threshold(self):
