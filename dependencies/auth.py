@@ -53,10 +53,6 @@ def get_current_user_id(
     username = credentials.username
     password = credentials.password
 
-    #this if the user is anonymous meaning null
-    if not username and not password: 
-        return get_anonymous_user_id()
-
     if username and not password:
         raise HTTPException(status_code=401, detail="Password is required when username is provided.")
 
