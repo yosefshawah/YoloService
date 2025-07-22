@@ -118,7 +118,7 @@ def predict(user_id = Depends(get_current_user_id) ,file: UploadFile = File(...)
     
     
     start_time = time.time()
-    ext = os.path.splitext(file.filename)[1]
+    ext = os.path.splitext(str(file.filename))[1]
     uid = str(uuid.uuid4())
     original_path = os.path.join(UPLOAD_DIR, uid + ext)
     predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
@@ -407,7 +407,7 @@ def health():
     return {"status": "ok"}
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8080)
