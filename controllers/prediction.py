@@ -12,8 +12,7 @@ from PIL import Image
 from database.db import get_db
 from database.queries import get_detection_objects, get_prediction_session
 from dependencies.auth import get_current_user_id
-from queries.queries import save_detection_object, save_prediction_session
-from controllers.prediction import router as prediction_router
+from queries.queries import query_sessions_by_label, save_detection_object, save_prediction_session
 
 router = APIRouter()
 
@@ -120,3 +119,19 @@ def get_prediction_by_uid(
             for obj in objects
         ],
     }
+    
+    
+@router.get("/predictions/label/{label}")
+def get_predictions_by_label(
+    label: str,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """
+    Get prediction sessions for current user that contain objects with the specified label.
+    """
+    sessions = query_sessions_by_label(db, label, user_id)
+    return [
+        {"uid": session.uid, "timestamp": session.timestamp}
+        for session in sessions
+    ]

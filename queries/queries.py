@@ -31,8 +31,32 @@ def save_detection_object(
         score=score,
         box=box
     )
+    
     db.add(detection)
     db.commit()
     db.refresh(detection)
     return detection
+
+
+
+def query_sessions_by_label(db: Session, label: str, user_id: int):
+    return (
+        db.query(PredictionSession)
+        .join(PredictionSession.detections)
+        .filter(DetectionObject.label == label, PredictionSession.user_id == user_id)
+        .distinct()
+        .all()
+    )
+    
+def query_sessions_by_min_score(db: Session, min_score: float, user_id: int):
+    return (
+        db.query(PredictionSession)
+        .join(PredictionSession.detections)
+        .filter(
+            DetectionObject.score >= min_score,
+            PredictionSession.user_id == user_id
+        )
+        .distinct()
+        .all()
+    )
 

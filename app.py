@@ -7,10 +7,11 @@ from fastapi import Request
 from dependencies.auth import get_current_user_id
 
 from controllers.prediction import router as prediction_router
+from controllers.stats import router as stats_router
 
 
-app = FastAPI()
-app.include_router(prediction_router)
+
+
 
 
 UPLOAD_DIR = "uploads/original"
@@ -20,35 +21,11 @@ DB_PATH = "predictions.db"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PREDICTED_DIR, exist_ok=True)
 
-# Download the AI model (tiny model ~6MB)
-model = YOLO("yolov8n.pt")
 
+app = FastAPI()
+app.include_router(prediction_router)
+app.include_router(stats_router)
 
-
-
-
-
-
-
-@app.get("/predictions/label/{label}")
-def get_predictions_by_label(label: str, user_id: int = Depends(get_current_user_id)):
-    """
-    Get prediction sessions belonging to the current user
-    that contain objects with the specified label.
-    """
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT DISTINCT ps.uid, ps.timestamp
-            FROM prediction_sessions ps
-            JOIN detection_objects do ON ps.uid = do.prediction_uid
-            WHERE do.label = ? AND ps.user_id = ?
-            """,
-            (label, user_id),
-        ).fetchall()
-
-        return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
 
 
 @app.get("/predictions/score/{min_score}")
@@ -248,4 +225,4 @@ def health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
