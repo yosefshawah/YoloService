@@ -6,11 +6,7 @@ import os
 from fastapi import Request
 from dependencies.auth import get_current_user_id
 
-
-
 from controllers.prediction import router as prediction_router
-
-
 
 
 app = FastAPI()
@@ -32,43 +28,6 @@ model = YOLO("yolov8n.pt")
 
 
 
-
-@app.get("/prediction/{uid}")
-def get_prediction_by_uid(  uid: str, user_id = Depends(get_current_user_id)):
- 
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-
-        # Only fetch if it belongs to this user
-        session = conn.execute(
-            "SELECT * FROM prediction_sessions WHERE uid = ? AND user_id = ?",
-            (uid, user_id)
-        ).fetchone()
-
-        if not session:
-            raise HTTPException(status_code=401, detail="Unauthorized or prediction not found")
-
-        objects = conn.execute(
-            "SELECT * FROM detection_objects WHERE prediction_uid = ?",
-            (uid,)
-        ).fetchall()
-
-        return {
-            "uid": session["uid"],
-            "timestamp": session["timestamp"],
-            "original_image": session["original_image"],
-            "predicted_image": session["predicted_image"],
-            "detection_objects": [
-                {
-                    "id": obj["id"],
-                    "label": obj["label"],
-                    "score": obj["score"],
-                    "box": obj["box"],
-                }
-                for obj in objects
-            ],
-        }
 
 
 @app.get("/predictions/label/{label}")

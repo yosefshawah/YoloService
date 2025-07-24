@@ -10,8 +10,10 @@ from ultralytics import YOLO
 from PIL import Image
 
 from database.db import get_db
+from database.queries import get_detection_objects, get_prediction_session
 from dependencies.auth import get_current_user_id
 from queries.queries import save_detection_object, save_prediction_session
+from controllers.prediction import router as prediction_router
 
 router = APIRouter()
 
@@ -88,4 +90,33 @@ def predict(
         "detection_count": len(results[0].boxes),
         "labels": detected_labels,
         "time_took": processing_time,
+    }
+    
+    
+@router.get("/prediction/{uid}")
+def get_prediction_by_uid(
+    uid: str,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    session = get_prediction_session(db, uid, user_id)
+    if not session:
+        raise HTTPException(status_code=401, detail="Unauthorized or prediction not found")
+
+    objects = get_detection_objects(db, uid)
+
+    return {
+        "uid": session.uid,
+        "timestamp": session.timestamp,
+        "original_image": session.original_image,
+        "predicted_image": session.predicted_image,
+        "detection_objects": [
+            {
+                "id": obj.id,
+                "label": obj.label,
+                "score": obj.score,
+                "box": obj.box,
+            }
+            for obj in objects
+        ],
     }
