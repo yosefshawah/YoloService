@@ -1,24 +1,20 @@
-from fastapi import Depends, FastAPI, UploadFile, File, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from ultralytics import YOLO
-from PIL import Image
 import sqlite3
 import os
-import uuid
-import shutil
-import time
 from fastapi import Request
 from dependencies.auth import get_current_user_id
-# Disable GPU usage
-import torch
-from database.db import get_db
-from models.models import PredictionSession
 
-db = get_db()
 
-torch.cuda.is_available = lambda: False
+
+from controllers.prediction import router as prediction_router
+
+
+
 
 app = FastAPI()
+app.include_router(prediction_router)
 
 
 UPLOAD_DIR = "uploads/original"
@@ -34,47 +30,6 @@ model = YOLO("yolov8n.pt")
 
 
 
-@app.post("/predict")
-def predict(user_id = Depends(get_current_user_id) ,file: UploadFile = File(...)):
-    """
-    Predict objects in an image
-    """
-    
-    
-    start_time = time.time()
-    ext = os.path.splitext(file.filename)[1]
-    uid = str(uuid.uuid4())
-    original_path = os.path.join(UPLOAD_DIR, uid + ext)
-    predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
-
-    with open(original_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-
-    results = model(original_path, device="cpu")
-
-    annotated_frame = results[0].plot()  # NumPy image with boxes
-    annotated_image = Image.fromarray(annotated_frame)
-    annotated_image.save(predicted_path)
-
-    save_prediction_session(uid, original_path, predicted_path, user_id=user_id)
-
-    detected_labels = []
-    for box in results[0].boxes:
-        label_idx = int(box.cls[0].item())
-        label = model.names[label_idx]
-        score = float(box.conf[0])
-        bbox = box.xyxy[0].tolist()
-        save_detection_object(uid, label, score, bbox)
-        detected_labels.append(label)
-
-    processing_time = round(time.time() - start_time, 2)
-
-    return {
-        "prediction_uid": uid,
-        "detection_count": len(results[0].boxes),
-        "labels": detected_labels,
-        "time_took": processing_time,
-    }
 
 
 
@@ -334,4 +289,4 @@ def health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
