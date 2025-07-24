@@ -12,6 +12,7 @@ from PIL import Image
 from database.db import get_db
 from database.queries import get_detection_objects, get_prediction_session
 from dependencies.auth import get_current_user_id
+from models.models import DetectionObject, PredictionSession
 from queries.queries import query_sessions_by_label, save_detection_object, save_prediction_session
 
 router = APIRouter()
@@ -135,3 +136,39 @@ def get_predictions_by_label(
         {"uid": session.uid, "timestamp": session.timestamp}
         for session in sessions
     ]
+    
+    
+
+
+@router.delete("/prediction/{uid}")
+def delete_prediction(
+    uid: str,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    # Find the prediction session for the user
+    session = db.query(PredictionSession).filter_by(uid=uid, user_id=user_id).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Prediction not found or access denied")
+
+    original_path = session.original_image
+    predicted_path = session.predicted_image
+
+    # Delete detection objects related to this prediction
+    db.query(DetectionObject).filter(DetectionObject.prediction_uid == uid).delete()
+    # Delete the prediction session
+    db.delete(session)
+    db.commit()
+
+    # Delete image files from disk
+    for path in [original_path, predicted_path]:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                print(f"Failed to delete file {path}: {e}")
+
+    return {"detail": f"Prediction {uid} and associated files deleted"}
+
+
