@@ -34,11 +34,6 @@ model = YOLO("yolov8n.pt")
 
 
 
-
-
-
-
-
 @app.post("/predict")
 def predict(user_id = Depends(get_current_user_id) ,file: UploadFile = File(...)):
     """
