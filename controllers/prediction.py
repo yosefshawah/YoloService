@@ -141,34 +141,38 @@ def get_predictions_by_label(
 
 
 @router.delete("/prediction/{uid}")
-def delete_prediction(
-    uid: str,
-    user_id: int = Depends(get_current_user_id),
+async def delete_prediction(
+    uid: str, 
     db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
 ):
-    # Find the prediction session for the user
-    session = db.query(PredictionSession).filter_by(uid=uid, user_id=user_id).first()
-
-    if not session:
-        raise HTTPException(status_code=404, detail="Prediction not found or access denied")
-
-    original_path = session.original_image
-    predicted_path = session.predicted_image
-
-    # Delete detection objects related to this prediction
-    db.query(DetectionObject).filter(DetectionObject.prediction_uid == uid).delete()
-    # Delete the prediction session
-    db.delete(session)
+    """Delete a prediction and its associated files"""
+    
+    # Find the prediction
+    prediction = db.query(PredictionSession).filter_by(
+        uid=uid, 
+        user_id=current_user_id
+    ).first()
+    
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    
+    # Delete associated detection objects
+    db.query(DetectionObject).filter(
+        DetectionObject.prediction_uid == prediction.uid
+    ).delete()
+    
+    # Delete files if they exist
+    if prediction.original_image and os.path.exists(prediction.original_image):
+        os.remove(prediction.original_image)
+    
+    if prediction.predicted_image and os.path.exists(prediction.predicted_image):
+        os.remove(prediction.predicted_image)
+    
+    # Delete the prediction from database
+    db.delete(prediction)
     db.commit()
-
-    # Delete image files from disk
-    for path in [original_path, predicted_path]:
-        if path and os.path.exists(path):
-            try:
-                os.remove(path)
-            except Exception as e:
-                print(f"Failed to delete file {path}: {e}")
-
-    return {"detail": f"Prediction {uid} and associated files deleted"}
+    
+    return {"message": "Prediction deleted successfully"}
 
 

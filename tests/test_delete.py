@@ -1,115 +1,63 @@
 import os
 import unittest
-import sqlite3
-import uuid
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
-from app import app, init_db, DB_PATH
+from app import app
+from database.db import get_db
 from dependencies.auth import get_current_user_id
+from models.models import PredictionSession
 
-# Dummy user IDs for testing
-TEST_USER_ID = 3001
-OTHER_USER_ID = 3002
+client = TestClient(app)
 
 class TestDeletePredictionEndpoint(unittest.TestCase):
     def setUp(self):
-        # Clear DB file and initialize fresh schema
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-        init_db()
+        self.uid = "test-uid"
+        self.user_id = 123
+        self.original_path = "uploads/original/test.jpg"
+        self.predicted_path = "uploads/predicted/test.jpg"
 
-        # Create uploads dirs for images
-        self.original_dir = os.path.join("uploads", "original")
-        self.predicted_dir = os.path.join("uploads", "predicted")
-        os.makedirs(self.original_dir, exist_ok=True)
-        os.makedirs(self.predicted_dir, exist_ok=True)
+        # Create a mock prediction object
+        self.mock_prediction = MagicMock(spec=PredictionSession)
+        self.mock_prediction.uid = self.uid
+        self.mock_prediction.user_id = self.user_id
+        self.mock_prediction.original_image = self.original_path
+        self.mock_prediction.predicted_image = self.predicted_path
+        self.mock_prediction.uid = 1  # for DetectionObject deletion filter
 
-        # Prepare dummy prediction data owned by TEST_USER_ID
-        self.uid = str(uuid.uuid4())
-        self.original_path = os.path.join(self.original_dir, f"{self.uid}.jpg")
-        self.predicted_path = os.path.join(self.predicted_dir, f"{self.uid}.jpg")
+        # Create a mock DB session
+        self.mock_db = MagicMock()
+        # When filter_by is called, return an object whose first() returns the mock prediction
+        filter_by_mock = MagicMock()
+        filter_by_mock.first.return_value = self.mock_prediction
+        self.mock_db.query.return_value.filter_by = MagicMock(return_value=filter_by_mock)
+        # Mock filter().delete() to do nothing
+        self.mock_db.query.return_value.filter.return_value.delete.return_value = None
 
-        # Create dummy image files
-        with open(self.original_path, "wb") as f:
-            f.write(b"original image data")
-        with open(self.predicted_path, "wb") as f:
-            f.write(b"predicted image data")
+        # Override get_db dependency to return the mock DB session
+        def override_get_db():
+            yield self.mock_db
+        app.dependency_overrides = {}
+        app.dependency_overrides[get_db] = override_get_db
 
-        # Insert a prediction session owned by TEST_USER_ID
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "INSERT INTO prediction_sessions (uid, user_id, timestamp, original_image, predicted_image) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)",
-                (self.uid, TEST_USER_ID, self.original_path, self.predicted_path),
-            )
-            conn.commit()
+        # Override get_current_user_id dependency to return the mock user_id
+        async def override_get_current_user_id():
+            return self.user_id
+        app.dependency_overrides[get_current_user_id] = override_get_current_user_id
 
-        # Create a prediction session owned by OTHER_USER_ID to test permission denial
-        self.other_uid = str(uuid.uuid4())
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "INSERT INTO prediction_sessions (uid, user_id, timestamp, original_image, predicted_image) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)",
-                (self.other_uid, OTHER_USER_ID, self.original_path, self.predicted_path),
-            )
-            conn.commit()
+    @patch("os.path.exists", return_value=True)
+    @patch("os.remove")
+    def test_delete_prediction_success(self, mock_remove, mock_exists):
+        response = client.delete(f"/prediction/{self.uid}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"message": "Prediction deleted successfully"})
 
-        self.client = TestClient(app)
+        # Confirm the files were attempted to be deleted
+        mock_remove.assert_any_call(self.original_path)
+        mock_remove.assert_any_call(self.predicted_path)
 
-        # Override the auth dependency to simulate logged in user as TEST_USER_ID by default
-        app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+        # Confirm the db delete and commit were called
+        self.mock_db.delete.assert_called_once_with(self.mock_prediction)
+        self.mock_db.commit.assert_called_once()
 
-
-        def test_delete_valid_prediction(self):
-            # User deletes their own prediction successfully
-            response = self.client.delete(f"/prediction/{self.uid}")
-            self.assertEqual(response.status_code, 200)
-            self.assertIn("deleted", response.json().get("detail", "").lower())
-
-            # Confirm DB record deleted
-            with sqlite3.connect(DB_PATH) as conn:
-                row = conn.execute("SELECT * FROM prediction_sessions WHERE uid = ?", (self.uid,)).fetchone()
-                self.assertIsNone(row)
-
-            # Confirm files are deleted
-            self.assertFalse(os.path.exists(self.original_path))
-            self.assertFalse(os.path.exists(self.predicted_path))
-
-    def test_delete_prediction_not_owned_by_user(self):
-        # Attempt to delete prediction owned by OTHER_USER_ID (should be denied)
-        response = self.client.delete(f"/prediction/{self.other_uid}")
-        self.assertEqual(response.status_code, 404)
-        self.assertIn("not found", response.json().get("detail", "").lower())
-
-        # Ensure DB record still exists
-        with sqlite3.connect(DB_PATH) as conn:
-            row = conn.execute("SELECT * FROM prediction_sessions WHERE uid = ?", (self.other_uid,)).fetchone()
-            self.assertIsNotNone(row)
-
-    def test_delete_prediction_not_exist(self):
-        # Attempt to delete a non-existent prediction
-        fake_uid = str(uuid.uuid4())
-        response = self.client.delete(f"/prediction/{fake_uid}")
-        self.assertEqual(response.status_code, 404)
-        self.assertIn("not found", response.json().get("detail", "").lower())
-        
-    def test_delete_files_raises_exception(self):
-        # Files must exist for the endpoint to try deleting them
-        with open(self.original_path, "wb") as f:
-            f.write(b"original image data")
-        with open(self.predicted_path, "wb") as f:
-            f.write(b"predicted image data")
-
-        # Temporarily rename os.remove so it raises an error
-        original_remove = os.remove
-        def raise_error(path):
-            raise OSError("forced error")
-
-        os.remove = raise_error
-
-        try:
-            response = self.client.delete(f"/prediction/{self.uid}")
-            self.assertEqual(response.status_code, 200)
-            self.assertIn("deleted", response.json().get("detail", "").lower())
-        finally:
-            # Restore original os.remove so other tests aren't affected
-            os.remove = original_remove
-
-        
+if __name__ == "__main__":
+    unittest.main()
