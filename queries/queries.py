@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Counter
 
 from sqlalchemy import func
 from models.models import PredictionSession
@@ -113,3 +114,5 @@ def query_detection_objects_last_8_days(db: Session, user_id: int, time_threshol
         )
         .all()
     )
+
+
