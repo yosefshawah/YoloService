@@ -7,10 +7,11 @@ from database.db import get_db
 from dependencies.auth import get_current_user_id
 from models.models import PredictionSession
 
-client = TestClient(app)
+
 
 class TestDeletePredictionEndpoint(unittest.TestCase):
     def setUp(self):
+        self.client = TestClient(app)
         self.uid = "test-uid"
         self.user_id = 123
         self.original_path = "uploads/original/test.jpg"
@@ -47,7 +48,7 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
     @patch("os.path.exists", return_value=True)
     @patch("os.remove")
     def test_delete_prediction_success(self, mock_remove, mock_exists):
-        response = client.delete(f"/prediction/{self.uid}")
+        response = self.client.delete(f"/prediction/{self.uid}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"message": "Prediction deleted successfully"})
 
@@ -58,6 +59,17 @@ class TestDeletePredictionEndpoint(unittest.TestCase):
         # Confirm the db delete and commit were called
         self.mock_db.delete.assert_called_once_with(self.mock_prediction)
         self.mock_db.commit.assert_called_once()
+        
+
+    def test_delete_prediction_not_found(self):
+        # Override mock so that filter_by.first() returns None (prediction not found)
+        filter_by_mock = MagicMock()
+        filter_by_mock.first.return_value = None
+        self.mock_db.query.return_value.filter_by = MagicMock(return_value=filter_by_mock)
+
+        response = self.client.delete(f"/prediction/{self.uid}")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Prediction not found"})
 
 if __name__ == "__main__":
     unittest.main()
