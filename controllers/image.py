@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from requests import Session
 
 from database.db import get_db
+from dependencies.auth import get_current_user_id
 from queries.queries import query_prediction_image_by_uid
 
 router = APIRouter()
@@ -28,13 +29,18 @@ def get_image(type: str, filename: str):
 
 
 @router.get("/prediction/{uid}/image")
-def get_prediction_image(uid: str, request: Request, db: Session = Depends(get_db)):
+def get_prediction_image(
+    uid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
     """
     Get prediction image by UID.
     """
     accept = request.headers.get("accept", "")
 
-    session = query_prediction_image_by_uid(db, uid)
+    session = query_prediction_image_by_uid(db, uid, user_id)  # <-- Pass user_id
     if not session:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
@@ -51,3 +57,4 @@ def get_prediction_image(uid: str, request: Request, db: Session = Depends(get_d
         raise HTTPException(
             status_code=406, detail="Client does not accept an image format"
         )
+

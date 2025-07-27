@@ -65,8 +65,8 @@ def query_sessions_by_min_score(db: Session, min_score: float, user_id: int):
     
 
 
-def query_prediction_image_by_uid(db: Session, uid: str):
-    return db.query(PredictionSession).filter(PredictionSession.uid == uid).first()
+def query_prediction_image_by_uid(db: Session, uid: str, user_id: int):
+    return db.query(PredictionSession).filter_by(uid=uid, user_id=user_id).first()
 
 
 
@@ -114,5 +114,3 @@ def query_detection_objects_last_8_days(db: Session, user_id: int, time_threshol
         )
         .all()
     )
-
-
