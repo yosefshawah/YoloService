@@ -1,79 +1,62 @@
-import os
-import sqlite3
-import uuid
-import base64
-import json
-from datetime import datetime
 import unittest
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-from app import app, init_db, DB_PATH
+from app import app  # Adjust as needed
+from database.db import get_db
 from dependencies.auth import get_current_user_id
 
-TEST_USERNAME = "testuser"
-TEST_PASSWORD = "testpass"
-ENCODED_CREDENTIALS = base64.b64encode(f"{TEST_USERNAME}:{TEST_PASSWORD}".encode()).decode()
-AUTH_HEADER = {"Authorization": f"Basic {ENCODED_CREDENTIALS}"}
-
-
-class TestLabelEndpoint(unittest.TestCase):
+class TestGetPredictionsByLabelEndpoint(unittest.TestCase):
     def setUp(self):
-        # Remove existing DB to start fresh
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-
-        # Initialize DB and tables
-        init_db()
-
-        # Insert test user with fixed user_id = 1
-        self.user_id = 1
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
-                (self.user_id, TEST_USERNAME, TEST_PASSWORD),
-            )
-            conn.commit()
-
-        # Create TestClient for API requests
         self.client = TestClient(app)
+        self.test_label = "cat"
+        self.mock_user_id = 42
 
-        # Override dependency to always return our test user_id for auth
-        app.dependency_overrides[get_current_user_id] = lambda: self.user_id
+    def tearDown(self):
+        app.dependency_overrides = {}
 
-    def setup_test_prediction(self, label):
-        uid = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+    def override_dependencies(self):
+        self.mock_db = MagicMock()
+        app.dependency_overrides[get_db] = lambda: self.mock_db
+        app.dependency_overrides[get_current_user_id] = lambda: self.mock_user_id
 
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "INSERT INTO prediction_sessions (uid, timestamp, user_id) VALUES (?, ?, ?)",
-                (uid, timestamp, self.user_id),
-            )
-            conn.execute(
-                "INSERT INTO detection_objects (prediction_uid, label, score, box) VALUES (?, ?, ?, ?)",
-                (uid, label, 0.95, json.dumps([50, 50, 100, 100])),
-            )
-            conn.commit()
+    @patch("controllers.prediction.query_sessions_by_label")
+    def test_get_predictions_by_label_success(self, mock_query_sessions):
+        self.override_dependencies()
 
-        return uid, timestamp
+        # mock returned sessions
+        mock_session1 = MagicMock()
+        mock_session1.uid = "uid-123"
+        mock_session1.timestamp = "2025-07-27T12:00:00"
 
-    def test_get_predictions_by_label(self):
-        label = "car"
-        uid, timestamp = self.setup_test_prediction(label)
+        mock_session2 = MagicMock()
+        mock_session2.uid = "uid-456"
+        mock_session2.timestamp = "2025-07-26T15:30:00"
 
-        response = self.client.get(f"/predictions/label/{label}", headers=AUTH_HEADER)
+        mock_query_sessions.return_value = [mock_session1, mock_session2]
+
+        response = self.client.get(f"/predictions/label/{self.test_label}")
+
         self.assertEqual(response.status_code, 200)
+        json_resp = response.json()
+        self.assertEqual(len(json_resp), 2)
+        self.assertEqual(json_resp[0]["uid"], "uid-123")
+        self.assertEqual(json_resp[0]["timestamp"], "2025-07-27T12:00:00")
+        self.assertEqual(json_resp[1]["uid"], "uid-456")
+        self.assertEqual(json_resp[1]["timestamp"], "2025-07-26T15:30:00")
 
-        predictions = response.json()
-
-        # Timestamp strings may differ slightly, so we match only the start
-        self.assertTrue(
-            any(
-                p["uid"] == uid and p["timestamp"].startswith(timestamp[:19])
-                for p in predictions
-            ),
-            f"Expected prediction with uid {uid} not found in response: {predictions}",
+        # Now use the SAME mock_db instance for asserting call args
+        mock_query_sessions.assert_called_once_with(
+            self.mock_db, self.test_label, self.mock_user_id
         )
 
+    @patch("controllers.prediction.query_sessions_by_label", return_value=[])
+    def test_get_predictions_by_label_no_results(self, mock_query_sessions):
+        self.override_dependencies()
+
+        response = self.client.get(f"/predictions/label/{self.test_label}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
 
 if __name__ == "__main__":
     unittest.main()
