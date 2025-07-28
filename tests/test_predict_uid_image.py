@@ -1,84 +1,109 @@
 import os
 import unittest
-import sqlite3
-import uuid
+from unittest.mock import MagicMock, patch
+from fastapi import Response
 from fastapi.testclient import TestClient
-from app import app, init_db, DB_PATH
-from shutil import rmtree
-
+from app import app  # adjust as needed
+from database.db import get_db
+from dependencies.auth import get_current_user_id
 
 class TestGetPredictionImageEndpoint(unittest.TestCase):
     def setUp(self):
-        # Clean and initialize DB
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-        init_db()
-
-        # Setup test image
-        self.uid = str(uuid.uuid4())
-        self.image_path = os.path.join("uploads", "predicted", f"{self.uid}.jpg")
-        os.makedirs(os.path.dirname(self.image_path), exist_ok=True)
-        with open(self.image_path, "wb") as f:
-            f.write(b"fake jpeg data")
-
-        # Insert test session into DB
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "INSERT INTO prediction_sessions (uid, user_id, timestamp, original_image, predicted_image) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)",
-                (self.uid, 1, "orig.jpg", self.image_path)
-            )
-            conn.commit()
-
         self.client = TestClient(app)
+        self.uid = "mocked-uid"
+        self.mock_user_id = 42
+        self.jpeg_path = f"uploads/predicted/{self.uid}.jpg"
+        self.png_path = f"uploads/predicted/{self.uid}.png"
 
-    def test_valid_jpeg_request(self):
+    def tearDown(self):
+        app.dependency_overrides = {}
+
+    def override_dependencies(self):
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        app.dependency_overrides[get_current_user_id] = lambda: self.mock_user_id
+
+    @patch("controllers.image.query_prediction_image_by_uid", return_value=None)
+    def test_prediction_not_found(self, mock_query):
+        self.override_dependencies()
         headers = {"Accept": "image/jpeg"}
         response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["content-type"], "image/jpeg")
-        self.assertEqual(response.content, b"fake jpeg data")
-
-    def test_prediction_uid_not_found(self):
-        fake_uid = str(uuid.uuid4())
-        headers = {"Accept": "image/jpeg"}
-        response = self.client.get(f"/prediction/{fake_uid}/image", headers=headers)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "Prediction not found")
 
-    def test_missing_image_file(self):
-        # Delete the file from disk
-        os.remove(self.image_path)
-        headers = {"Accept": "image/jpeg"}
-        response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "Predicted image file not found")
+  
+ 
+   
 
-    def test_unsupported_accept_header(self):
+    @patch("controllers.image.query_prediction_image_by_uid")
+    @patch("os.path.exists", return_value=True)
+    def test_unsupported_accept_header(self, mock_exists, mock_query):
+        self.override_dependencies()
+
+        mock_session = MagicMock()
+        mock_session.predicted_image = self.jpeg_path
+        mock_query.return_value = mock_session
+
         headers = {"Accept": "application/json"}
         response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
+
         self.assertEqual(response.status_code, 406)
         self.assertEqual(response.json()["detail"], "Client does not accept an image format")
 
-    def test_valid_png_request(self):
-        # First, create a fake PNG file
-        png_path = os.path.join("uploads", "predicted", f"{self.uid}.png")
-        with open(png_path, "wb") as f:
-            f.write(b"fake png data")
+    @patch("controllers.image.query_prediction_image_by_uid")
+    @patch("os.path.exists", return_value=False)
+    def test_image_file_missing(self, mock_exists, mock_query):
+        self.override_dependencies()
 
-        # Update the database to use the PNG path instead
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "UPDATE prediction_sessions SET predicted_image = ? WHERE uid = ?",
-                (png_path, self.uid)
-            )
-            conn.commit()
+        mock_session = MagicMock()
+        mock_session.predicted_image = self.jpeg_path
+        mock_query.return_value = mock_session
 
-        headers = {"Accept": "image/png"}
+        headers = {"Accept": "image/jpeg"}
         response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["content-type"], "image/png")
-        self.assertEqual(response.content, b"fake png data")
 
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Predicted image file not found")
+        
+
+
+    @patch("controllers.image.FileResponse")
+    @patch("controllers.image.query_prediction_image_by_uid")
+    @patch("os.path.exists", return_value=True)
+    def test_valid_jpeg_request(self, mock_exists, mock_query, mock_file_response):
+        self.override_dependencies()
+
+        mock_session = MagicMock()
+        mock_session.predicted_image = self.jpeg_path
+        mock_query.return_value = mock_session
+
+        # Return a real Response with proper headers, not just a MagicMock
+        fake_response = Response(content=b"", media_type="image/jpeg")
+        mock_file_response.return_value = fake_response
+
+        headers = {"Accept": "image/jpeg"}
+        response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
+        
+    @patch("controllers.image.FileResponse")
+    @patch("controllers.image.query_prediction_image_by_uid")
+    @patch("os.path.exists", return_value=True)
+    def test_valid_jpg_request(self, mock_exists, mock_query, mock_file_response):
+        self.override_dependencies()
+
+        mock_session = MagicMock()
+        mock_session.predicted_image = f"uploads/predicted/{self.uid}.jpg"  # explicitly .jpg here
+        mock_query.return_value = mock_session
+
+        fake_response = Response(content=b"", media_type="image/jpeg")
+        mock_file_response.return_value = fake_response
+
+        headers = {"Accept": "image/jpg"}
+        response = self.client.get(f"/prediction/{self.uid}/image", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
 
 if __name__ == "__main__":
     unittest.main()

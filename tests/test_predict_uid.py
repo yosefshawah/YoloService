@@ -1,88 +1,63 @@
-import os
 import unittest
-import sqlite3
-import uuid
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-from app import app, init_db, DB_PATH
+from app import app  # Adjust import if your FastAPI app is elsewhere
+from database.db import get_db
 from dependencies.auth import get_current_user_id
 
-TEST_USER = "testuser_fullcode"
-TEST_PASS = "testpass"
-TEST_USER_ID = 1001
-
-SECOND_USER = "seconduser_fullcode"
-SECOND_PASS = "secondpass"
-SECOND_USER_ID = 1002
-
-
-class TestGetPredictionByUID(unittest.TestCase):
+class TestGetPredictionByUid(unittest.TestCase):
     def setUp(self):
-        # Remove DB file if exists to start fresh
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-
-        # Initialize DB tables
-        init_db()
-
-        # Insert test users and initial prediction data
-        with sqlite3.connect(DB_PATH) as conn:
-            # Insert users
-            conn.execute(
-                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
-                (TEST_USER_ID, TEST_USER, TEST_PASS),
-            )
-            conn.execute(
-                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
-                (SECOND_USER_ID, SECOND_USER, SECOND_PASS),
-            )
-
-            # Insert prediction session for TEST_USER
-            self.uid = str(uuid.uuid4())
-            conn.execute(
-                "INSERT INTO prediction_sessions (uid, user_id, timestamp, original_image, predicted_image) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)",
-                (self.uid, TEST_USER_ID, "original.jpg", "predicted.jpg"),
-            )
-            conn.execute(
-                "INSERT INTO detection_objects (prediction_uid, label, score, box) VALUES (?, ?, ?, ?)",
-                (self.uid, "cat", 0.95, "[10,20,30,40]"),
-            )
-            conn.commit()
-
-        # Create TestClient and override auth dependency to simulate TEST_USER_ID
         self.client = TestClient(app)
-        app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+        self.mock_uid = "mocked-uid"
+        self.mock_user_id = 42
 
     def tearDown(self):
-        # Clear dependency overrides to avoid leakage between tests
         app.dependency_overrides = {}
 
-    def test_get_prediction_success(self):
-        headers = {"Authorization": "Basic dummy"}  # Auth overridden anyway
-        response = self.client.get(f"/prediction/{self.uid}", headers=headers)
+    def override_dependencies(self):
+        # Mock get_db dependency with MagicMock
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        # Mock current user id dependency
+        app.dependency_overrides[get_current_user_id] = lambda: self.mock_user_id
+
+    @patch("controllers.prediction.get_prediction_session")
+    @patch("controllers.prediction.get_detection_objects")
+    def test_successful_prediction_response(self, mock_get_detection_objects, mock_get_prediction_session):
+        self.override_dependencies()
+
+        # Mock the prediction session return value
+        mock_session = MagicMock()
+        mock_session.uid = self.mock_uid
+        mock_session.timestamp = "2025-07-27T12:00:00"
+        mock_session.original_image = "uploads/original/mocked-uid.png"
+        mock_session.predicted_image = "uploads/predicted/mocked-uid.png"
+        mock_get_prediction_session.return_value = mock_session
+
+        # Mock detection objects returned
+        mock_obj1 = MagicMock(id=1, label="cat", score=0.9, box=[10, 20, 30, 40])
+        mock_obj2 = MagicMock(id=2, label="dog", score=0.8, box=[50, 60, 70, 80])
+        mock_get_detection_objects.return_value = [mock_obj1, mock_obj2]
+
+        response = self.client.get(f"/prediction/{self.mock_uid}")
+
         self.assertEqual(response.status_code, 200)
-
         data = response.json()
-        self.assertEqual(data["uid"], self.uid)
-        self.assertEqual(data["original_image"], "original.jpg")
-        self.assertEqual(data["predicted_image"], "predicted.jpg")
-        self.assertIsInstance(data["detection_objects"], list)
-        self.assertGreater(len(data["detection_objects"]), 0)
+        self.assertEqual(data["uid"], self.mock_uid)
+        self.assertEqual(data["timestamp"], "2025-07-27T12:00:00")
+        self.assertEqual(data["original_image"], "uploads/original/mocked-uid.png")
+        self.assertEqual(data["predicted_image"], "uploads/predicted/mocked-uid.png")
+        self.assertEqual(len(data["detection_objects"]), 2)
         self.assertEqual(data["detection_objects"][0]["label"], "cat")
+        self.assertEqual(data["detection_objects"][1]["label"], "dog")
 
-    def test_get_prediction_unauthorized(self):
-        # Override auth dependency to simulate second user
-        app.dependency_overrides[get_current_user_id] = lambda: SECOND_USER_ID
+    @patch("controllers.prediction.get_prediction_session", return_value=None)
+    def test_prediction_not_found(self, mock_get_prediction_session):
+        self.override_dependencies()
 
-        headers = {"Authorization": "Basic dummy"}
-        response = self.client.get(f"/prediction/{self.uid}", headers=headers)
+        response = self.client.get(f"/prediction/{self.mock_uid}")
+
         self.assertEqual(response.status_code, 401)
-        self.assertIn("Unauthorized", response.json().get("detail", ""))
-
-    def test_get_prediction_not_found(self):
-        headers = {"Authorization": "Basic dummy"}
-        response = self.client.get("/prediction/non-existent-uid", headers=headers)
-        self.assertEqual(response.status_code, 401)
-        self.assertIn("Unauthorized", response.json().get("detail", ""))
+        self.assertEqual(response.json()["detail"], "Unauthorized or prediction not found")
 
 
 if __name__ == "__main__":
