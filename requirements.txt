@@ -8,6 +8,7 @@ pytest==7.4.0
 pytest-cov==4.1.0
 pytest-html==3.2.0
 sqlalchemy
+dotenv
 # Ultralytics YOLOv8 (includes minimal dependencies)
 ultralytics>=8.0.0
 python-multipart>=0.0.6
