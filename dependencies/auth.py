@@ -1,75 +1,63 @@
 # dependencies/auth.py
 
-import sqlite3
-import os
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import Optional
-from fastapi import Request
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "predictions.db")
+from database.db import get_db
+from models.models import User
 
 security = HTTPBasic(auto_error=False)
 
-def ensure_users_table():
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
-            );
-        """)
-
-def get_user_by_username(cursor, username):
-    cursor.execute("SELECT id, password FROM users WHERE username = ?", (username,))
-    return cursor.fetchone()
-
-def create_user(cursor, username, password):
-    cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-    return cursor.lastrowid
-
-def get_anonymous_user_id() -> int:
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password)
-            VALUES ("__anonymous__", "__none__");
-        """)
-        conn.commit()
-        cursor.execute("SELECT id FROM users WHERE username = '__anonymous__'")
-        return cursor.fetchone()[0]
+def ensure_anonymous_user(db: Session):
+    anonymous_user = db.query(User).filter_by(username="__anonymous__").first()
+    if not anonymous_user:
+        new_user = User(username="__anonymous__", password="__none__")
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return new_user.id
+    return anonymous_user.id
 
 def get_current_user_id(
     request: Request,
     credentials: Optional[HTTPBasicCredentials] = Depends(security),
-    ):
-    
-    ensure_users_table()
-
+    db: Session = Depends(get_db)
+):
     if credentials is None or (not credentials.username and not credentials.password):
-        return get_anonymous_user_id()
- 
+        return ensure_anonymous_user(db)
+
     username = credentials.username
     password = credentials.password
 
     if username and not password:
-        raise HTTPException(status_code=401, detail="Password is required when username is provided.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password is required when username is provided."
+        )
 
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        user = get_user_by_username(cursor, username)
+    user = db.query(User).filter_by(username=username).first()
 
-        if user:
-            stored_password = user[1]
-            if stored_password == password:
-                return user[0]
-            raise HTTPException(status_code=401, detail="Incorrect password.")
-        else:
-            # Auto-create user
-            try:
-                user_id = create_user(cursor, username, password)
-                conn.commit()
-                return user_id
-            except sqlite3.IntegrityError:
-                raise HTTPException(status_code=500, detail="User creation failed.")
+    if user:
+        if user.password == password:
+            return user.id
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password."
+        )
+    else:
+        # Auto-create user
+        try:
+            new_user = User(username=username, password=password)
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            return new_user.id
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="User creation failed due to integrity error."
+            )
