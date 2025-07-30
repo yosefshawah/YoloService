@@ -4,9 +4,11 @@ from controllers.stats import router as stats_router
 from controllers.image import router as images_router
 from controllers.labels import router as labels_router
 from controllers.health import router as health_router
+from database.db import init_db
 
 
 app = FastAPI()
+init_db()
 app.include_router(prediction_router)
 app.include_router(stats_router)
 app.include_router(images_router)

@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 
-Base = declarative_base()
+from database.db import Base
 
 class PredictionSession(Base):
     __tablename__ = 'prediction_sessions'
