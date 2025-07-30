@@ -1,14 +1,13 @@
-# db.py
-
 
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-
+load_dotenv()
 DB_BACKEND = os.getenv("DB_BACKEND", "sqlite")
 
 if DB_BACKEND == "postgres":
-    DATABASE_URL = "postgresql://user:pass@localhost/db"
+    DATABASE_URL = "postgresql://user:pass@localhost:5432/predictions"
 else:
     DATABASE_URL = "sqlite:///./predictions.db"
 
@@ -26,3 +25,8 @@ def get_db():
         yield db
     finally:
         db.close()
+        
+def init_db():
+    if DB_BACKEND == "postgres":
+        print("Creating tables in Postgres...")
+        Base.metadata.create_all(bind=engine)
