@@ -1,13 +1,22 @@
-name: Run Tests
+name: Run Tests and Publish Allure Report
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment: github-pages
 
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +33,47 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=app --cov-report=xml
+          pytest --cov=app --cov-report=xml --alluredir=allure-results
+
+      - name: Upload Allure results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+
+      - name: Install Java (for Allure CLI)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-jre
+
+      - name: Install Allure CLI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          curl -sL https://github.com/allure-framework/allure2/releases/download/2.24.0/allure-2.24.0.tgz -o allure.tgz
+          tar -xzf allure.tgz
+          sudo mv allure-2.24.0 /opt/allure
+          sudo ln -sf /opt/allure/bin/allure /usr/bin/allure
+
+      - name: Generate Allure report
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          allure generate allure-results -o allure-report --clean
+
+      - name: Setup Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact (Allure report)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./allure-report
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: deployment
+        uses: actions/deploy-pages@v4
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
