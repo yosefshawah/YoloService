@@ -32,8 +32,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests with coverage
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "0"
         run: |
-          pytest --cov=app --cov-report=xml --alluredir=allure-results
+          pytest -p allure_pytest --cov=app --cov-report=xml --alluredir=allure-results
 
       - name: Upload Allure results artifact
         uses: actions/upload-artifact@v4
