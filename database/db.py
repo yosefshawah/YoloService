@@ -27,6 +27,5 @@ def get_db():
         db.close()
         
 def init_db():
-    if DB_BACKEND == "postgres":
-        print("Creating tables in Postgres...")
-        Base.metadata.create_all(bind=engine)
+    print(f"Creating tables for {DB_BACKEND}...")
+    Base.metadata.create_all(bind=engine)
