@@ -24,6 +24,7 @@ router = APIRouter()
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
 DB_PATH = "predictions.db"
+CHATS_BASE_DIR = "uploads/chats"
 
 AWS_REGION = os.getenv("AWS_REGION")
 AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
@@ -62,21 +63,40 @@ def predict(
         s3_key = img
         # Download to temp then move to our uploads/original
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        original_ext = os.path.splitext(img)[1] or ".jpg"
-        original_path = os.path.join(UPLOAD_DIR, uid + original_ext)
+        original_name = os.path.basename(img)
+        base_name, original_ext = os.path.splitext(original_name)
+        if not original_ext:
+            original_ext = ".jpg"
+        final_filename = f"{base_name}-{uid}{original_ext}"
+        original_path = os.path.join(UPLOAD_DIR, final_filename)
         try:
             download_s3_key_to_path(s3_key, original_path)
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"S3 download failed: {str(e)}")
-        predicted_ext = original_ext
-        predicted_path = os.path.join(PREDICTED_DIR, uid + predicted_ext)
+        # Predicted local path under chats/<chat_id>/predicted if chat_id provided
+        if chat_id:
+            predicted_dir = os.path.join(CHATS_BASE_DIR, chat_id, "predicted")
+        else:
+            predicted_dir = PREDICTED_DIR
+        os.makedirs(predicted_dir, exist_ok=True)
+        predicted_path = os.path.join(predicted_dir, final_filename)
     else:
         if file is None:
             raise HTTPException(status_code=400, detail="Provide img query for S3 or upload a file")
         # Generate file paths from uploaded file
-        ext = os.path.splitext(file.filename)[1] or ".jpg"
-        original_path = os.path.join(UPLOAD_DIR, uid + ext)
-        predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
+        original_name = file.filename
+        base_name, ext = os.path.splitext(original_name)
+        if not ext:
+            ext = ".jpg"
+        final_filename = f"{base_name}-{uid}{ext}"
+        original_path = os.path.join(UPLOAD_DIR, final_filename)
+        # Predicted local path under chats/<chat_id>/predicted if chat_id provided
+        if chat_id:
+            predicted_dir = os.path.join(CHATS_BASE_DIR, chat_id, "predicted")
+        else:
+            predicted_dir = PREDICTED_DIR
+        os.makedirs(predicted_dir, exist_ok=True)
+        predicted_path = os.path.join(predicted_dir, final_filename)
 
     # If using uploaded file, persist it
     if not img:
@@ -89,12 +109,13 @@ def predict(
     annotated_image = Image.fromarray(annotated_frame)
     annotated_image.save(predicted_path)
 
-    # If S3 configured and source was S3 or chat_id provided, upload results
+    # If S3 configured, upload only the predicted image
     if s3_client:
-        target_original_key = f"{chat_id}/original/{os.path.basename(original_path)}" if chat_id else f"original/{os.path.basename(original_path)}"
-        target_predicted_key = f"{chat_id}/predicted/{os.path.basename(predicted_path)}" if chat_id else f"predicted/{os.path.basename(predicted_path)}"
         try:
-            upload_path_to_s3_key(original_path, target_original_key)
+            if chat_id:
+                target_predicted_key = f"chats/{chat_id}/predicted/{os.path.basename(predicted_path)}"
+            else:
+                target_predicted_key = f"predicted/{os.path.basename(predicted_path)}"
             upload_path_to_s3_key(predicted_path, target_predicted_key)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
