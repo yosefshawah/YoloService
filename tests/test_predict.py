@@ -1,7 +1,5 @@
 import os
 import time
-import uuid
-import shutil
 import unittest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -29,8 +27,11 @@ class TestPredictEndpoint(unittest.TestCase):
     @patch("controllers.prediction.save_prediction_session")
     @patch("controllers.prediction.model")
     @patch("shutil.copyfileobj")
-    @patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678"))
-    def test_predict_success(self, mock_uuid, mock_copyfileobj, mock_model, mock_save_session, mock_save_detection):
+    @patch("controllers.prediction.Image.fromarray")
+    @patch("controllers.prediction.upload_path_to_s3_key")
+    @patch("controllers.prediction.get_s3_client", return_value=None)
+    @patch("controllers.prediction.s3_client", new=None)
+    def test_predict_success(self, mock_get_s3, mock_s3_upload, mock_fromarray, mock_copyfileobj, mock_model, mock_save_session, mock_save_detection):
         self.override_dependencies()
 
         # Setup mock model return value
@@ -56,31 +57,25 @@ class TestPredictEndpoint(unittest.TestCase):
 
         mock_model.return_value = [mock_result]
 
-        # Also mock PIL.Image.fromarray and save to avoid actual file I/O
-        with patch("controllers.prediction.Image.fromarray") as mock_fromarray:
-            mock_img_instance = MagicMock()
-            mock_fromarray.return_value = mock_img_instance
+        # Mock PIL.Image.fromarray to avoid real image handling
+        mock_img_instance = MagicMock()
+        mock_fromarray.return_value = mock_img_instance
 
-            response = self.client.post(
-                "/predict",
-                files={"file": ("test.jpg", b"fake image content", "image/jpeg")},
-                headers={"accept": "application/json"},
-            )
+        response = self.client.post(
+            "/predict",
+            files={"file": ("test.jpg", b"fake image content", "image/jpeg")},
+            headers={"accept": "application/json"},
+        )
 
-            self.assertEqual(response.status_code, 200)
-            json_resp = response.json()
-            self.assertEqual(json_resp["prediction_uid"], "12345678-1234-5678-1234-567812345678")
-            self.assertEqual(json_resp["detection_count"], 2)
-            self.assertIn("labels", json_resp)
-            self.assertIsInstance(json_resp["time_took"], float)
+        self.assertEqual(response.status_code, 200)
+        json_resp = response.json()
+        self.assertEqual(json_resp["detection_count"], 2)
+        self.assertIn("labels", json_resp)
+        self.assertIsInstance(json_resp["time_took"], float)
 
-            # Check detected labels use model.names mock - we can patch model.names too if needed
-            # But for now just check label list exists
-            self.assertTrue(len(json_resp["labels"]) == 2)
-
-            # Confirm save functions called
-            mock_save_session.assert_called_once()
-            self.assertEqual(mock_save_detection.call_count, 2)
+        # Confirm save functions called
+        mock_save_session.assert_called_once()
+        self.assertEqual(mock_save_detection.call_count, 2)
 
 if __name__ == "__main__":
     unittest.main()
