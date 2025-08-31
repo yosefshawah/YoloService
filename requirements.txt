@@ -13,3 +13,4 @@ dotenv
 # Ultralytics YOLOv8 (includes minimal dependencies)
 ultralytics>=8.0.0
 python-multipart>=0.0.6
+boto3>=1.34.0

@@ -3,9 +3,13 @@ import shutil
 import time
 import uuid
 from fastapi import APIRouter, Depends
-from fastapi import UploadFile, File, HTTPException
+from fastapi import UploadFile, File, HTTPException, Query
 from sqlalchemy.orm import Session
 import torch
+import boto3
+import tempfile
+from botocore.config import Config
+from services.s3 import download_s3_key_to_path, upload_path_to_s3_key, get_s3_client
 from ultralytics import YOLO
 from PIL import Image
 
@@ -20,6 +24,12 @@ router = APIRouter()
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
 DB_PATH = "predictions.db"
+CHATS_BASE_DIR = "uploads/chats"
+
+AWS_REGION = os.getenv("AWS_REGION")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
+aws_config = Config(region_name=AWS_REGION) if AWS_REGION else None
+s3_client = get_s3_client()
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PREDICTED_DIR, exist_ok=True)
@@ -33,7 +43,9 @@ model = YOLO("yolov8n.pt")
 @router.post("/predict")
 def predict(
     user_id: int = Depends(get_current_user_id),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
+    img: str | None = Query(default=None),
+    chat_id: str | None = Query(default=None),
     db: Session = Depends(get_db)
 ):
     """
@@ -41,21 +53,72 @@ def predict(
     """
     start_time = time.time()
 
-    # Generate file paths
-    ext = os.path.splitext(file.filename)[1]
     uid = str(uuid.uuid4())
-    original_path = os.path.join(UPLOAD_DIR, uid + ext)
-    predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
 
-    # Save uploaded file to disk
-    with open(original_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    # Determine image source: S3 by img param, else uploaded file
+    if img:
+        if not s3_client:
+            raise HTTPException(status_code=500, detail="S3 not configured")
+        # Treat 'img' as the exact S3 key (no automatic prefix)
+        s3_key = img
+        # Download to temp then move to our uploads/original
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        original_name = os.path.basename(img)
+        base_name, original_ext = os.path.splitext(original_name)
+        if not original_ext:
+            original_ext = ".jpg"
+        final_filename = f"{base_name}-{uid}{original_ext}"
+        original_path = os.path.join(UPLOAD_DIR, final_filename)
+        try:
+            download_s3_key_to_path(s3_key, original_path)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"S3 download failed: {str(e)}")
+        # Predicted local path under chats/<chat_id>/predicted if chat_id provided
+        if chat_id:
+            predicted_dir = os.path.join(CHATS_BASE_DIR, chat_id, "predicted")
+        else:
+            predicted_dir = PREDICTED_DIR
+        os.makedirs(predicted_dir, exist_ok=True)
+        predicted_path = os.path.join(predicted_dir, final_filename)
+    else:
+        if file is None:
+            raise HTTPException(status_code=400, detail="Provide img query for S3 or upload a file")
+        # Generate file paths from uploaded file
+        original_name = file.filename
+        base_name, ext = os.path.splitext(original_name)
+        if not ext:
+            ext = ".jpg"
+        final_filename = f"{base_name}-{uid}{ext}"
+        original_path = os.path.join(UPLOAD_DIR, final_filename)
+        # Predicted local path under chats/<chat_id>/predicted if chat_id provided
+        if chat_id:
+            predicted_dir = os.path.join(CHATS_BASE_DIR, chat_id, "predicted")
+        else:
+            predicted_dir = PREDICTED_DIR
+        os.makedirs(predicted_dir, exist_ok=True)
+        predicted_path = os.path.join(predicted_dir, final_filename)
+
+    # If using uploaded file, persist it
+    if not img:
+        with open(original_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
 
     # Run YOLO prediction
     results = model(original_path, device="cpu")
     annotated_frame = results[0].plot()
     annotated_image = Image.fromarray(annotated_frame)
     annotated_image.save(predicted_path)
+
+    # If S3 configured, upload only the predicted image
+    if s3_client:
+        try:
+            if chat_id:
+                target_predicted_key = f"chats/{chat_id}/predicted/{os.path.basename(predicted_path)}"
+            else:
+                target_predicted_key = f"predicted/{os.path.basename(predicted_path)}"
+            upload_path_to_s3_key(predicted_path, target_predicted_key)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
 
     # Save session metadata
     save_prediction_session(

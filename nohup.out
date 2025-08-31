@@ -1,0 +1,42 @@
+The push refers to repository [docker.io/yosefshawah/yolo]
+9b1f47f09e70: Preparing
+37b6f940d62c: Preparing
+b388c47b914a: Preparing
+973c73a7b7b1: Preparing
+456436e73494: Preparing
+40baad5f6a6d: Preparing
+92bb8d2db95d: Preparing
+2a7f563c8c5a: Preparing
+92bb8d2db95d: Waiting
+2a7f563c8c5a: Waiting
+40baad5f6a6d: Waiting
+456436e73494: Layer already exists
+973c73a7b7b1: Layer already exists
+b388c47b914a: Layer already exists
+40baad5f6a6d: Layer already exists
+92bb8d2db95d: Layer already exists
+2a7f563c8c5a: Layer already exists
+The push refers to repository [docker.io/yosefshawah/yolo]
+9b1f47f09e70: Preparing
+37b6f940d62c: Preparing
+b388c47b914a: Preparing
+973c73a7b7b1: Preparing
+456436e73494: Preparing
+40baad5f6a6d: Preparing
+92bb8d2db95d: Preparing
+2a7f563c8c5a: Preparing
+40baad5f6a6d: Waiting
+92bb8d2db95d: Waiting
+2a7f563c8c5a: Waiting
+973c73a7b7b1: Layer already exists
+456436e73494: Layer already exists
+b388c47b914a: Layer already exists
+40baad5f6a6d: Layer already exists
+92bb8d2db95d: Layer already exists
+2a7f563c8c5a: Layer already exists
+9b1f47f09e70: 9b1f47f09e70: Pushed
+Pushed
+37b6f940d62c: 37b6f940d62c: Pushed
+Pushed
+0.0.1: digest: sha256:5361a47d46dc4798c56fd613a2fc4b1ee80aec8491591d4a3ae57c4660072edd size: 2003
+0.0.1: digest: sha256:5361a47d46dc4798c56fd613a2fc4b1ee80aec8491591d4a3ae57c4660072edd size: 2003
