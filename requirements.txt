@@ -10,6 +10,7 @@ pytest-html==3.2.0
 allure-pytest==2.13.5
 sqlalchemy
 dotenv
+psycopg2-binary
 # Ultralytics YOLOv8 (includes minimal dependencies)
 ultralytics>=8.0.0
 python-multipart>=0.0.6
