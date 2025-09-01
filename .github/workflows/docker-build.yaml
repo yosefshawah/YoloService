@@ -13,29 +13,43 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up QEMU for cross-platform builds
+      # 2️⃣ Bump version and create a new tag
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_branches: main
+
+      # 3️⃣ Set VERSION_TAG from the new tag
+      - name: Set VERSION_TAG
+        run: echo "VERSION_TAG=${{ steps.tag_version.outputs.new_tag }}" >> $GITHUB_ENV
+
+      # 4️⃣ Set up QEMU for cross-platform builds
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 3️⃣ Set up Docker Buildx
+      # 5️⃣ Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 4️⃣ Log in to Docker Hub (use username + PAT)
+      # 6️⃣ Log in to Docker Hub (use PAT instead of password)
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 5️⃣ Build and push multi-arch image
+      # 7️⃣ Build and push multi-arch image
       - name: Build and push Docker image
         run: |
           # Tags
-          VERSION_TAG="0.0.2"
+          VERSION_TAG="${VERSION_TAG}"
           COMMIT_TAG="${{ github.sha }}-$(date +%Y%m%d-%H%M%S)"
 
-          # Build and push with multiple tags
+          echo "Building version: $VERSION_TAG"
+          echo "Commit tag: $COMMIT_TAG"
+
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag ${{ secrets.DOCKERHUB_USERNAME }}/yolo:$VERSION_TAG \
