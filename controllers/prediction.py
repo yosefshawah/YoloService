@@ -12,6 +12,7 @@ from botocore.config import Config
 from services.s3 import download_s3_key_to_path, upload_path_to_s3_key, get_s3_client
 from ultralytics import YOLO
 from PIL import Image
+from urllib.parse import unquote
 
 from database.db import get_db
 from database.queries import get_detection_objects, get_prediction_session
@@ -54,16 +55,19 @@ def predict(
     start_time = time.time()
 
     uid = str(uuid.uuid4())
+    # Ensure fresh S3 client per request (handles IAM/IMDS at runtime)
+    s3_client = get_s3_client()
 
     # Determine image source: S3 by img param, else uploaded file
     if img:
         if not s3_client:
             raise HTTPException(status_code=500, detail="S3 not configured")
         # Treat 'img' as the exact S3 key (no automatic prefix)
-        s3_key = img
+        decoded = unquote(img)
+        s3_key = decoded
         # Download to temp then move to our uploads/original
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        original_name = os.path.basename(img)
+        original_name = os.path.basename(decoded)
         base_name, original_ext = os.path.splitext(original_name)
         if not original_ext:
             original_ext = ".jpg"
