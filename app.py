@@ -5,6 +5,9 @@ from controllers.image import router as images_router
 from controllers.labels import router as labels_router
 from controllers.health import router as health_router
 from database.db import init_db
+from multiprocessing import Process
+from typing import Optional
+from services.worker import start_receive_worker, stop_receive_worker
 
 
 app = FastAPI()
@@ -14,6 +17,21 @@ app.include_router(stats_router)
 app.include_router(images_router)
 app.include_router(labels_router)
 app.include_router(health_router)
+
+_worker_process: Optional[Process] = None
+
+
+@app.on_event("startup")
+async def _app_startup() -> None:
+    global _worker_process
+    _worker_process = start_receive_worker()
+
+
+@app.on_event("shutdown")
+async def _app_shutdown() -> None:
+    global _worker_process
+    stop_receive_worker(_worker_process)
+    _worker_process = None
 
 
 
