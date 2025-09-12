@@ -8,8 +8,9 @@ from botocore.config import Config
 
 
 def get_s3_client():
-    region = os.getenv("AWS_REGION")
-    bucket = os.getenv("AWS_S3_BUCKET")
+    # Prefer new vars, fallback to old for compatibility
+    region = os.getenv("S3_REGION") or os.getenv("AWS_REGION")
+    bucket = os.getenv("S3_BUCKET") or os.getenv("AWS_S3_BUCKET")
     if not region or not bucket:
         return None
     return boto3.client("s3", config=Config(region_name=region))
@@ -19,7 +20,7 @@ def download_s3_key_to_path(key: str, dest_path: str) -> None:
     s3 = get_s3_client()
     if s3 is None:
         raise RuntimeError("S3 is not configured")
-    bucket = os.getenv("AWS_S3_BUCKET")
+    bucket = os.getenv("S3_BUCKET") or os.getenv("AWS_S3_BUCKET")
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp_path = tmp.name
@@ -38,7 +39,16 @@ def upload_path_to_s3_key(src_path: str, key: str) -> None:
     s3 = get_s3_client()
     if s3 is None:
         raise RuntimeError("S3 is not configured")
-    bucket = os.getenv("AWS_S3_BUCKET")
+    bucket = os.getenv("S3_BUCKET") or os.getenv("AWS_S3_BUCKET")
     s3.upload_file(src_path, bucket, key)
 
+
+def build_s3_url(key: str) -> str:
+    bucket = os.getenv("S3_BUCKET") or os.getenv("AWS_S3_BUCKET")
+    region = os.getenv("S3_REGION") or os.getenv("AWS_REGION")
+    if not bucket:
+        raise RuntimeError("S3 bucket not configured")
+    if region:
+        return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+    return f"https://{bucket}.s3.amazonaws.com/{key}"
 
