@@ -1,5 +1,6 @@
 from multiprocessing import Process
 from typing import Optional
+from threading import Thread
 
 
 def _worker_entrypoint() -> None:
@@ -22,4 +23,27 @@ def stop_receive_worker(proc: Optional[Process]) -> None:
     if proc and proc.is_alive():
         proc.terminate()
         proc.join(timeout=5)
+
+
+def _thread_entrypoint(async_main) -> None:
+    import asyncio
+    asyncio.run(async_main())
+
+
+def start_billing_consumer_thread() -> Thread:
+    from billing_consumer import main as billing_main
+
+    t = Thread(target=_thread_entrypoint, args=(billing_main,), name="billing-consumer", daemon=True)
+    t.start()
+    print(" [*] Started billing consumer thread")
+    return t
+
+
+def start_analytics_consumer_thread() -> Thread:
+    from analytics_consumer import main as analytics_main
+
+    t = Thread(target=_thread_entrypoint, args=(analytics_main,), name="analytics-consumer", daemon=True)
+    t.start()
+    print(" [*] Started analytics consumer thread")
+    return t
 
