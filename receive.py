@@ -12,6 +12,7 @@ from database.db import SessionLocal
 from queries.queries import save_detection_object, save_prediction_session
 from services.predictor import YoloPredictor
 from services.s3 import download_s3_key_to_path
+from services.event_publisher import publish_event
 
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
@@ -131,6 +132,21 @@ async def handle_message(message: aio_pika.IncomingMessage) -> None:
                 "predicted_path": predicted_path,
             }
         , callback_url_override)
+
+        # Publish domain event for other microservices
+        try:
+            await publish_event(
+                routing_key="images.processed",
+                payload={
+                    "prediction_uid": uid,
+                    "user_id": user_id,
+                    "labels": [d["label"] for d in detections],
+                    "detection_count": count,
+                    "chat_id": chat_id,
+                },
+            )
+        except Exception as exc:
+            print(f"[events] publish failed: {exc}")
 
 
 async def main() -> None:
