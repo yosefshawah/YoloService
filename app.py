@@ -7,7 +7,12 @@ from controllers.health import router as health_router
 from database.db import init_db
 from multiprocessing import Process
 from typing import Optional
-from services.worker import start_receive_worker, stop_receive_worker
+from services.worker import (
+    start_receive_worker,
+    stop_receive_worker,
+    start_billing_consumer_thread,
+    start_analytics_consumer_thread,
+)
 
 
 app = FastAPI()
@@ -19,12 +24,16 @@ app.include_router(labels_router)
 app.include_router(health_router)
 
 _worker_process: Optional[Process] = None
+_billing_thread = None
+_analytics_thread = None
 
 
 @app.on_event("startup")
 async def _app_startup() -> None:
-    global _worker_process
+    global _worker_process, _billing_thread, _analytics_thread
     _worker_process = start_receive_worker()
+    _billing_thread = start_billing_consumer_thread()
+    _analytics_thread = start_analytics_consumer_thread()
 
 
 @app.on_event("shutdown")
