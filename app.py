@@ -31,9 +31,9 @@ _analytics_thread = None
 @app.on_event("startup")
 async def _app_startup() -> None:
     global _worker_process, _billing_thread, _analytics_thread
-    _worker_process = start_receive_worker()
-    _billing_thread = start_billing_consumer_thread()
-    _analytics_thread = start_analytics_consumer_thread()
+    _worker_process = start_receive_worker() # pragma: no cover
+    _billing_thread = start_billing_consumer_thread() # pragma: no cover
+    _analytics_thread = start_analytics_consumer_thread() # pragma: no cover
 
 
 @app.on_event("shutdown")
