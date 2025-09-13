@@ -13,6 +13,8 @@ from queries.queries import save_detection_object, save_prediction_session
 from services.predictor import YoloPredictor
 from services.s3 import download_s3_key_to_path
 from services.event_publisher import publish_event
+from dependencies.auth import ensure_anonymous_user
+from models.models import User
 
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
@@ -77,8 +79,9 @@ async def handle_message(message: aio_pika.IncomingMessage) -> None:
     async with message.process(requeue=False):
         data = json.loads(message.body.decode("utf-8"))
 
-        user_id = int(data.get("user_id", 0))
+        raw_user_id = data.get("user_id")
         chat_id: Optional[str] = data.get("chat_id")
+        username: Optional[str] = data.get("username")
         callback_url_override: Optional[str] = data.get("callback_url")
         # Use incoming prediction UID if supplied; else generate
         uid = str(data.get("prediction_uid")) if data.get("prediction_uid") else str(uuid.uuid4())
@@ -104,12 +107,26 @@ async def handle_message(message: aio_pika.IncomingMessage) -> None:
         # Persist DB rows
         db = SessionLocal()
         try:
+            # Resolve effective user id: explicit user_id -> username -> anonymous
+            if raw_user_id is not None:
+                effective_user_id = int(raw_user_id)
+            elif username:
+                user = db.query(User).filter_by(username=username).first()
+                if not user:
+                    user = User(username=username, password="__none__")
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
+                effective_user_id = user.id
+            else:
+                effective_user_id = ensure_anonymous_user(db)
+
             save_prediction_session(
                 db=db,
                 uid=uid,
                 original_image=original_path,
                 predicted_image=predicted_path,
-                user_id=user_id,
+                user_id=effective_user_id,
             )
             for det in detections:
                 save_detection_object(
@@ -126,7 +143,7 @@ async def handle_message(message: aio_pika.IncomingMessage) -> None:
         await _send_callback(
             {
                 "prediction_uid": uid,
-                "user_id": user_id,
+                "user_id": effective_user_id,
                 "labels": [d["label"] for d in detections],
                 "detection_count": count,
                 "predicted_path": predicted_path,
@@ -139,7 +156,7 @@ async def handle_message(message: aio_pika.IncomingMessage) -> None:
                 routing_key="images.processed",
                 payload={
                     "prediction_uid": uid,
-                    "user_id": user_id,
+                    "user_id": effective_user_id,
                     "labels": [d["label"] for d in detections],
                     "detection_count": count,
                     "chat_id": chat_id,
